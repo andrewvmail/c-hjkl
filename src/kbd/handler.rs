@@ -1,4 +1,8 @@
-use libc::{c_char, c_void, input_event, ioctl, open, read, O_RDONLY};
+use std::ffi::CString;
+use std::io;
+use libc::{c_char, c_void, input_event, ioctl, open, read, O_RDONLY, c_int};
+
+const TAG: &str = "[ handler.rs ]";
 
 const EVIOCGRAB: u64 = 1074021776;
 
@@ -24,27 +28,38 @@ pub struct KeyboardHandler {
 }
 
 impl KeyboardHandler {
-    pub fn new(device_path: &String, debug: bool) -> KeyboardHandler {
+    pub fn new(device_path: &str, debug: bool) -> Result<KeyboardHandler, String> {
+        let c_path = CString::new(device_path).expect("CString::new failed");
+        let oflag: c_int = O_RDONLY;
+        let fd: c_int;
         unsafe {
-            let fd = open(device_path[..].as_ptr() as *const c_char, O_RDONLY);
+            fd = open(c_path.as_ptr(), oflag);
+            println!("{} fd of open: {}", TAG, fd);
+        }
+        unsafe {
+            // print the device path
+            println!("{} device_path: {}", TAG, device_path);
+            let c_path = CString::new(device_path).expect("CString::new failed");
+
+            let fd = open(c_path.as_ptr(), O_RDONLY);
             if fd == -1 {
-                panic!("Cannot open input device: {}", device_path);
+                panic!("{} last_os_error: {}", TAG, io::Error::last_os_error());
             }
 
-            KeyboardHandler {
+            Ok(KeyboardHandler {
                 device_path: device_path.to_string(),
                 is_grabbed: false,
-                uinput: uinput::default()
-                    .unwrap()
+                uinput: uinput::open("/dev/uinput")
+                    .map_err(|e| format!("Failed to create uinput device: {}", e))?
                     .name(format!("C-HJKL Output for {}", device_path))
-                    .unwrap()
+                    .map_err(|e| format!("Failed to set uinput device name: {}", e))?
                     .event(uinput::event::Keyboard::All)
-                    .unwrap()
+                    .map_err(|e| format!("Failed to set uinput device event: {}", e))?
                     .create()
-                    .unwrap(),
+                    .map_err(|e| format!("Failed to create uinput device: {}", e))?,
                 debug,
                 fd,
-            }
+            })
         }
     }
 

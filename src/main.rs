@@ -29,10 +29,15 @@ fn main() {
             .map(|kbd| {
                 println!("Keyboard \"{}\" detected.", kbd.name);
 
-                let mut handler = kbd::handler::KeyboardHandler::new(&kbd.device_path, verbose);
-                thread::spawn(move || {
-                    handler.run_forever();
-                })
+                match kbd::handler::KeyboardHandler::new(&kbd.device_path, verbose) {
+                    Ok(mut handler) => thread::spawn(move || {
+                        handler.run_forever();
+                    }),
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        process::exit(1);
+                    }
+                }
             })
             .collect::<Vec<_>>();
 
